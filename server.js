@@ -11,51 +11,27 @@ server.on('connection', (ws) => {
     ws.on('message', (message) => {
         const data = JSON.parse(message);
 
-        // Handle team creation
-        if (data.type === 'create_team') {
-            const { teamCode } = data;
-
-            // If the team already exists, reject the request
-            if (games[teamCode]) {
-                ws.send(JSON.stringify({ type: 'error', message: 'Team code already exists.' }));
-                return;
-            }
-
-            // Create the team with an empty player list
-            games[teamCode] = { players: [], state: {} };
-            console.log(`Team ${teamCode} created`);
-
-            // Notify the player who created the team
-            ws.send(JSON.stringify({ type: 'team_created', teamCode }));
-        }
-
-        // Handle joining a team
         if (data.type === 'join') {
             const { teamCode, playerName } = data;
-
-            // If the team does not exist, reject the request
             if (!games[teamCode]) {
-                ws.send(JSON.stringify({ type: 'error', message: 'Team code does not exist.' }));
-                return;
+                games[teamCode] = { players: [], state: {} };
             }
 
-            // Add the player to the team
             games[teamCode].players.push({ name: playerName, ws });
             console.log(`${playerName} joined team ${teamCode}`);
 
-            // Notify all players in the team that a new player joined
+            // Notify all players in the team
             broadcast(teamCode, { type: 'player_joined', playerName });
+
+            // Start the game if there are 2 players
+            if (games[teamCode].players.length === 2) {
+                startGame(teamCode);
+            }
         }
 
-        // Handle game actions (e.g., making a move)
         if (data.type === 'game_action') {
             const { teamCode, action } = data;
-
-            // Update the game state with the action
-            games[teamCode].state = { ...games[teamCode].state, action };
-
-            // Broadcast the action to all players in the team
-            broadcast(teamCode, { type: 'game_update', action });
+            handleGameAction(teamCode, action);
         }
     });
 
@@ -64,7 +40,52 @@ server.on('connection', (ws) => {
     });
 });
 
-// Function to broadcast a message to all players in the team
+// Start the game
+function startGame(teamCode) {
+    const game = games[teamCode];
+    game.state.deck = createDeck();
+    shuffleDeck(game.state.deck);
+    dealCards(game.players);
+
+    broadcast(teamCode, { type: 'game_started', state: game.state });
+}
+
+// Create a deck of cards
+function createDeck() {
+    const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
+    const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    let deck = [];
+
+    for (let suit of suits) {
+        for (let value of values) {
+            deck.push(`${value} of ${suit}`);
+        }
+    }
+    return deck;
+}
+
+// Shuffle the deck
+function shuffleDeck(deck) {
+    for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+}
+
+// Deal cards to players
+function dealCards(players) {
+    players.forEach(player => {
+        player.cards = [game.state.deck.pop(), game.state.deck.pop()];
+    });
+}
+
+// Handle player game actions (e.g., bet, fold)
+function handleGameAction(teamCode, action) {
+    console.log(`Player performed action: ${action}`);
+    broadcast(teamCode, { type: 'game_action', action });
+}
+
+// Broadcast message to all players in the game
 function broadcast(teamCode, message) {
     if (games[teamCode]) {
         games[teamCode].players.forEach(player => {
