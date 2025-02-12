@@ -1,0 +1,13 @@
+{
+    "name": "texas-holdem-server",
+    "version": "1.0.0",
+    "description": "WebSocket server for Texas Hold'em",
+    "main": "server.js",
+    "scripts": {
+      "start": "node server.js"
+    },
+    "dependencies": {
+      "ws": "^8.11.0"
+    }
+  }
+  
